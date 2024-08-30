@@ -15,7 +15,7 @@ StageDirector is a powerful and flexible window management Spoon for Hammerspoon
 
 ## Requirements
 
-- macOS 10.10+
+- macOS
 - [Hammerspoon](http://www.hammerspoon.org/)
 
 ## Installation
@@ -27,7 +27,7 @@ StageDirector is a powerful and flexible window management Spoon for Hammerspoon
 5. Add the following to your `init.lua`:
 
 ```lua
-hs.loadSpoon("StageDirector")
+local StageDirector = hs.loadSpoon("StageDirector")
 ```
 
 ## Configuration
@@ -140,4 +140,4 @@ Contributions to StageDirector are welcome! Please feel free to submit a Pull Re
 
 ## Acknowledgements
 
-StageDirector was created by Rino and is inspired by various window management tools and the macOS Stage Manager feature.
+StageDirector was created by Rino and is inspired by various window management tools.
