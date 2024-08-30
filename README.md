@@ -36,29 +36,34 @@ Here's a basic configuration to get you started:
 
 ```lua
 local StageDirector = hs.loadSpoon("StageDirector")
-StageDirector:init()
 
--- Configure gaps and Stage Manager width
-StageDirector:setWindowGap(8)
-StageDirector:setEdgeGap(8)
-StageDirector:setStageManagerWidth(64)
-StageDirector:setCustomMaximizeSizes({0.9, 0.65})
+if StageDirector then
+    StageDirector:init()
 
--- Set up hotkeys
-local ctrlCmd = {"cmd", "ctrl"}
-hs.hotkey.bind(ctrlCmd, "left", StageDirector:moveOrResize("left"))
-hs.hotkey.bind(ctrlCmd, "right", StageDirector:moveOrResize("right"))
-hs.hotkey.bind(ctrlCmd, "up", StageDirector:moveOrResize("top"))
-hs.hotkey.bind(ctrlCmd, "down", StageDirector:moveOrResize("bottom"))
+    -- Configure gaps and Stage Manager width
+    StageDirector:setWindowGap(8)
+    StageDirector:setEdgeGap(8)
+    StageDirector:setStageManagerWidth(64)
+    StageDirector:setCustomMaximizeSizes({0.9, 0.65})
 
-hs.hotkey.bind(ctrlCmd, "1", StageDirector:moveOrResizeCorner(1))
-hs.hotkey.bind(ctrlCmd, "2", StageDirector:moveOrResizeCorner(2))
-hs.hotkey.bind(ctrlCmd, "3", StageDirector:moveOrResizeCorner(3))
-hs.hotkey.bind(ctrlCmd, "4", StageDirector:moveOrResizeCorner(4))
+    -- Set up hotkeys
+    local ctrlCmd = {"cmd", "ctrl"}
+    hs.hotkey.bind(ctrlCmd, "left", StageDirector:moveOrResize("left"))
+    hs.hotkey.bind(ctrlCmd, "right", StageDirector:moveOrResize("right"))
+    hs.hotkey.bind(ctrlCmd, "up", StageDirector:moveOrResize("top"))
+    hs.hotkey.bind(ctrlCmd, "down", StageDirector:moveOrResize("bottom"))
 
-hs.hotkey.bind(ctrlCmd, "return", function() StageDirector:toggleMaximize() end)
-hs.hotkey.bind(ctrlCmd, "c", function() StageDirector:center() end)
-hs.hotkey.bind(ctrlCmd, "u", function() StageDirector:upperCenter() end)
+    hs.hotkey.bind(ctrlCmd, "1", StageDirector:moveOrResizeCorner(1))
+    hs.hotkey.bind(ctrlCmd, "2", StageDirector:moveOrResizeCorner(2))
+    hs.hotkey.bind(ctrlCmd, "3", StageDirector:moveOrResizeCorner(3))
+    hs.hotkey.bind(ctrlCmd, "4", StageDirector:moveOrResizeCorner(4))
+
+    hs.hotkey.bind(ctrlCmd, "return", StageDirector:toggleMaximize())
+    hs.hotkey.bind(ctrlCmd, "c", StageDirector:center())
+    hs.hotkey.bind(ctrlCmd, "u", StageDirector:upperCenter())
+else
+    hs.alert.show("Failed to load StageDirector Spoon")
+end
 ```
 
 ## Usage
