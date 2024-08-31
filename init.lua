@@ -215,6 +215,7 @@ function obj:moveOrResizeCorner(corner)
 end
 
 -- Toggle between different maximize states
+-- Toggle between different maximize states
 function obj:toggleMaximize()
     return function()
         local win = hs.window.focusedWindow()
@@ -225,24 +226,27 @@ function obj:toggleMaximize()
         local isCentered = isAlmostCentered(win, screen)
         local currentIndex = getCurrentSizeIndex(win, screen)
 
-        local newSize
         if not isCentered or not currentIndex then
+            -- First state: largest almost maximize size
             newSize = obj.almostMaximizeSizes[1]
+            wf.w = sf.w * newSize
+            wf.h = sf.h * newSize
+            wf.x = sf.x + (sf.w - wf.w) / 2
+            wf.y = sf.y + (sf.h - wf.h) / 2
         else
-            local nextIndex = (currentIndex % (#obj.almostMaximizeSizes + 1)) + 1
-            if nextIndex > #obj.almostMaximizeSizes then
-                wf = sf
-                win:setFrame(wf)
-                return
-            else
+            local nextIndex = currentIndex + 1
+            if nextIndex <= #obj.almostMaximizeSizes then
+                -- Cycle through almost maximize sizes
                 newSize = obj.almostMaximizeSizes[nextIndex]
+                wf.w = sf.w * newSize
+                wf.h = sf.h * newSize
+                wf.x = sf.x + (sf.w - wf.w) / 2
+                wf.y = sf.y + (sf.h - wf.h) / 2
+            else
+                -- Full maximize, accounting for Stage Manager
+                wf = sf
             end
         end
-
-        wf.w = sf.w * newSize
-        wf.h = sf.h * newSize
-        wf.x = sf.x + (sf.w - wf.w) / 2
-        wf.y = sf.y + (sf.h - wf.h) / 2
 
         win:setFrame(wf)
     end
