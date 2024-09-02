@@ -406,19 +406,21 @@ end
 
 -- Change Stage Manager stage
 function obj:changeStage(stageNumber)
-    local script = string.format([[
-        tell application "System Events" to tell process "WindowManager"
-            tell list 1 of group 1
-                click button %d
+    return function()
+        local script = string.format([[
+            tell application "System Events" to tell process "WindowManager"
+                tell list 1 of group 1
+                    click button %d
+                end tell
             end tell
-        end tell
-    ]], stageNumber)
+        ]], stageNumber)
 
-    local ok, _, _ = hs.osascript.applescript(script)
-    if ok then
-        obj.logger.i("Changed to Stage " .. stageNumber)
-    else
-        obj.logger.w("Failed to change Stage")
+        local ok, _, _ = hs.osascript.applescript(script)
+        if ok then
+            obj.logger.i("Changed to Stage " .. stageNumber)
+        else
+            obj.logger.w("Failed to change Stage")
+        end
     end
 end
 
