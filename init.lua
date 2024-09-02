@@ -1,30 +1,31 @@
---- StageDirector.spoon/init.lua
--- Window management Spoon for Hammerspoon, compatible with macOS Stage Manager
--- by Rino, Aug 2024
+-- StageDirector.spoon/init.lua
+-- Advanced Window management Spoon for Hammerspoon, compatible with macOS Stage Manager
+-- by Rino, Sep 2024
 
 local obj = {}
 obj.__index = obj
 
 -- Metadata
 obj.name = "StageDirector"
-obj.version = "1.0"
+obj.version = "2.0"
 obj.author = "Rino"
 obj.homepage = "https://github.com/rinodrops/StageDirector.spoon"
 obj.license = "MIT - https://opensource.org/licenses/MIT"
 
 -- Logger
-obj.logger = hs.logger.new('StageDirector')
+obj.logger = hs.logger.new('StageDirector', "debug")
 
 -- Configuration (can be changed by the user)
-obj.stageManagerWidth = 64  -- Width of Stage Manager sidebar
+obj.stageManagerWidth = 40  -- Width of Stage Manager sidebar
 obj.windowGap = 8           -- Gap between windows
 obj.edgeGap = 8             -- Gap between windows and screen edges
 obj.almostMaximizeSizes = {0.9, 0.65}  -- Default sizes for Almost Maximize
+obj.animationDelay = 0      -- Animation delay in seconds
 
 -- Internal variables
 local stageManagerEnabled = false
 local dockPosition = "bottom"
-local currentMaximizeState = 0
+local equalityTolerance = 0.02  -- 2% tolerance for "almost equal" comparisons
 
 -- Helper Functions
 
@@ -40,13 +41,15 @@ end
 local function updateStageManagerAndDockInfo()
     stageManagerEnabled = (runCommand("defaults read com.apple.WindowManager GloballyEnabled") == "1")
     dockPosition = runCommand("defaults read com.apple.dock orientation")
+    obj.logger.i("Stage Manager: " .. (stageManagerEnabled and "Enabled" or "Disabled") .. ", Dock: " .. dockPosition)
 end
 
 -- Get the adjusted frame considering Stage Manager and gaps
 local function getAdjustedFrame(screen)
-    local max = screen:frame()
+    local max = screen:frame()  -- This already accounts for the menu bar
     local leftOffset = (stageManagerEnabled and dockPosition ~= "left") and obj.stageManagerWidth or 0
     local rightOffset = (stageManagerEnabled and dockPosition == "left") and obj.stageManagerWidth or 0
+
     return {
         x = max.x + leftOffset + obj.edgeGap,
         y = max.y + obj.edgeGap,
@@ -55,19 +58,9 @@ local function getAdjustedFrame(screen)
     }
 end
 
--- Calculate width considering gaps
-local function calculateWidth(sf, fraction)
-    return (sf.w - ((1 / fraction) - 1) * obj.windowGap) * fraction
-end
-
--- Calculate height considering gaps
-local function calculateHeight(sf, fraction)
-    return (sf.h - ((1 / fraction) - 1) * obj.windowGap) * fraction
-end
-
--- Check if two numbers are almost equal (within 5% tolerance)
+-- Check if two numbers are almost equal
 local function isAlmostEqual(a, b)
-    return math.abs(a - b) <= 0.05 * b
+    return math.abs(a - b) <= equalityTolerance * math.max(math.abs(a), math.abs(b))
 end
 
 -- Check if a window is at a specific edge of the screen
@@ -86,6 +79,27 @@ local function isAtEdge(win, screen, edge)
     return false
 end
 
+-- Check if a window is at a corner
+local function isAtCorner(win, screen, corner)
+    local edges = {
+        [1] = {"left", "top"},
+        [2] = {"right", "top"},
+        [3] = {"left", "bottom"},
+        [4] = {"right", "bottom"}
+    }
+    return isAtEdge(win, screen, edges[corner][1]) and isAtEdge(win, screen, edges[corner][2])
+end
+
+-- Calculate width considering gaps
+local function calculateWidth(sf, fraction)
+    return math.floor((sf.w - ((1 / fraction) - 1) * obj.windowGap) * fraction)
+end
+
+-- Calculate height considering gaps
+local function calculateHeight(sf, fraction)
+    return math.floor((sf.h - ((1 / fraction) - 1) * obj.windowGap) * fraction)
+end
+
 -- Get the current size fraction of a window
 local function getCurrentSizeFraction(win, screen, dimension)
     local wf = win:frame()
@@ -97,39 +111,14 @@ local function getCurrentSizeFraction(win, screen, dimension)
     else return fraction end
 end
 
--- Check if a window is almost centered on the screen
-local function isAlmostCentered(win, screen)
-    local wf = win:frame()
-    local sf = getAdjustedFrame(screen)
-    local centerX = sf.x + (sf.w - wf.w) / 2
-    local centerY = sf.y + (sf.h - wf.h) / 2
-    return isAlmostEqual(wf.x, centerX) and isAlmostEqual(wf.y, centerY)
-end
-
--- Get the current size index for almost maximize
-local function getCurrentSizeIndex(win, screen)
-    local wf = win:frame()
-    local sf = getAdjustedFrame(screen)
-    local currentSize = math.min(wf.w / sf.w, wf.h / sf.h)
-    for i, size in ipairs(obj.almostMaximizeSizes) do
-        if isAlmostEqual(currentSize, size) then
-            return i
-        end
-    end
-    return nil
-end
-
--- Public Methods
-
--- Initialize the Spoon
-function obj:init()
-    updateStageManagerAndDockInfo()
-end
+-- Main Functions
 
 -- Move or resize window in a specific direction
 function obj:moveOrResize(direction)
     return function()
         local win = hs.window.focusedWindow()
+        if not win then return end
+
         local screen = win:screen()
         local sf = getAdjustedFrame(screen)
         local wf = win:frame()
@@ -143,36 +132,47 @@ function obj:moveOrResize(direction)
             if not atEdge then
                 wf.x = isLeft and sf.x or (sf.x + sf.w - wf.w)
             else
-                if isAlmostEqual(currentFractionW, 1/2) then
-                    wf.w = calculateWidth(sf, 1/3)
-                elseif isAlmostEqual(currentFractionW, 1/3) then
-                    wf.w = calculateWidth(sf, 1/4)
-                else
+                if not isAlmostEqual(wf.h, sf.h) then
+                    wf.h = sf.h
                     wf.w = calculateWidth(sf, 1/2)
+                else
+                    if isAlmostEqual(currentFractionW, 1/2) then
+                        wf.w = calculateWidth(sf, 1/3)
+                    elseif isAlmostEqual(currentFractionW, 1/3) then
+                        wf.w = calculateWidth(sf, 1/4)
+                    else
+                        wf.w = calculateWidth(sf, 1/2)
+                    end
                 end
                 wf.x = isLeft and sf.x or (sf.x + sf.w - wf.w)
-                wf.y = sf.y
-                wf.h = sf.h
             end
+            wf.y = sf.y
+            wf.h = sf.h
         elseif direction == "top" or direction == "bottom" then
             local isTop = (direction == "top")
+            wf_old = wf
             if not atEdge then
                 wf.y = isTop and sf.y or (sf.y + sf.h - wf.h)
             else
-                if isAlmostEqual(currentFractionH, 1/2) then
-                    wf.h = calculateHeight(sf, 1/3)
-                elseif isAlmostEqual(currentFractionH, 1/3) then
-                    wf.h = calculateHeight(sf, 1/4)
-                else
+                if not isAlmostEqual(wf.w, sf.w) then
+                    wf.w = sf.w
                     wf.h = calculateHeight(sf, 1/2)
+                else
+                    if isAlmostEqual(currentFractionH, 1/2) then
+                        wf.h = calculateHeight(sf, 1/3)
+                    elseif isAlmostEqual(currentFractionH, 1/3) then
+                        wf.h = calculateHeight(sf, 1/4)
+                    else
+                        wf.h = calculateHeight(sf, 1/2)
+                    end
                 end
-                wf.x = sf.x
                 wf.y = isTop and sf.y or (sf.y + sf.h - wf.h)
-                wf.w = sf.w
             end
+            wf.x = sf.x
+            wf.w = sf.w
         end
 
-        win:setFrame(wf)
+        win:setFrame(wf, obj.animationDelay)
     end
 end
 
@@ -180,6 +180,8 @@ end
 function obj:moveOrResizeCorner(corner)
     return function()
         local win = hs.window.focusedWindow()
+        if not win then return end
+
         local screen = win:screen()
         local sf = getAdjustedFrame(screen)
         local wf = win:frame()
@@ -187,81 +189,82 @@ function obj:moveOrResizeCorner(corner)
         local isLeft = (corner == 1 or corner == 3)
         local isTop = (corner == 1 or corner == 2)
 
-        local atCorner = isAtEdge(win, screen, isLeft and "left" or "right") and
-                         isAtEdge(win, screen, isTop and "top" or "bottom")
+        -- Always set the position first
+        wf.x = isLeft and sf.x or (sf.x + sf.w - wf.w)
+        wf.y = isTop and sf.y or (sf.y + sf.h - wf.h)
 
-        if not atCorner then
-            wf.x = isLeft and sf.x or (sf.x + sf.w - wf.w)
-            wf.y = isTop and sf.y or (sf.y + sf.h - wf.h)
+        if not isAtCorner(win, screen, corner) then
+            -- If not at the corner, just move to the corner without resizing
+            win:setFrame(wf, obj.animationDelay)
         else
+            -- If already at the corner, cycle through sizes
             local currentFractionW = getCurrentSizeFraction(win, screen, "w")
             local currentFractionH = getCurrentSizeFraction(win, screen, "h")
-            if currentFractionW == 1/2 and currentFractionH == 1/2 then
+
+            if isAlmostEqual(currentFractionW, 1/2) and isAlmostEqual(currentFractionH, 1/2) then
                 wf.w = calculateWidth(sf, 1/3)
-                wf.h = calculateHeight(sf, 1/3)
-            elseif currentFractionW == 1/3 and currentFractionH == 1/3 then
+                wf.h = calculateHeight(sf, 1/2)
+            elseif isAlmostEqual(currentFractionW, 1/3) and isAlmostEqual(currentFractionH, 1/2) then
                 wf.w = calculateWidth(sf, 1/4)
+                wf.h = calculateHeight(sf, 1/2)
+            elseif isAlmostEqual(currentFractionW, 1/4) and isAlmostEqual(currentFractionH, 1/2) then
+                wf.w = calculateWidth(sf, 1/2)
                 wf.h = calculateHeight(sf, 1/4)
             else
                 wf.w = calculateWidth(sf, 1/2)
                 wf.h = calculateHeight(sf, 1/2)
             end
+
+            -- Reposition after resizing to ensure it stays in the corner
             wf.x = isLeft and sf.x or (sf.x + sf.w - wf.w)
             wf.y = isTop and sf.y or (sf.y + sf.h - wf.h)
         end
 
-        win:setFrame(wf)
+        win:setFrame(wf, obj.animationDelay)
     end
 end
 
--- Toggle between different maximize states
 -- Toggle between different maximize states
 function obj:toggleMaximize()
     return function()
         local win = hs.window.focusedWindow()
+        if not win then return end
+
         local screen = win:screen()
         local sf = getAdjustedFrame(screen)
         local wf = win:frame()
 
-        local isCentered = isAlmostCentered(win, screen)
-        local currentIndex = getCurrentSizeIndex(win, screen)
+        local currentSize = math.min(wf.w / sf.w, wf.h / sf.h)
+        local nextSize
 
-        if not isCentered or not currentIndex then
-            -- First state: largest almost maximize size
-            newSize = obj.almostMaximizeSizes[1]
-            wf.w = sf.w * newSize
-            wf.h = sf.h * newSize
-            wf.x = sf.x + (sf.w - wf.w) / 2
-            wf.y = sf.y + (sf.h - wf.h) / 2
-        else
-            local nextIndex = currentIndex + 1
-            if nextIndex <= #obj.almostMaximizeSizes then
-                -- Cycle through almost maximize sizes
-                newSize = obj.almostMaximizeSizes[nextIndex]
-                wf.w = sf.w * newSize
-                wf.h = sf.h * newSize
-                wf.x = sf.x + (sf.w - wf.w) / 2
-                wf.y = sf.y + (sf.h - wf.h) / 2
-            else
-                -- Full maximize, accounting for Stage Manager
-                wf = sf
+        for i, size in ipairs(obj.almostMaximizeSizes) do
+            if isAlmostEqual(currentSize, size) then
+                if i == #obj.almostMaximizeSizes then
+                    -- If we're at the last almost maximize size, go to full maximize
+                    nextSize = 1
+                else
+                    nextSize = obj.almostMaximizeSizes[i + 1]
+                end
+                break
             end
         end
 
-        win:setFrame(wf)
-    end
-end
+        if not nextSize then
+            if isAlmostEqual(currentSize, 1) then
+                -- If we're at full maximize, go back to the first almost maximize size
+                nextSize = obj.almostMaximizeSizes[1]
+            else
+                -- If we're not at any known size, start with the first almost maximize size
+                nextSize = obj.almostMaximizeSizes[1]
+            end
+        end
 
--- Maximize the height of the window
-function obj:maximizeHeight()
-    return function()
-        local win = hs.window.focusedWindow()
-        local f = win:frame()
-        local screen = win:screen()
-        local max = getAdjustedFrame(screen)
-        f.y = max.y
-        f.h = max.h
-        win:setFrame(f)
+        wf.w = sf.w * nextSize
+        wf.h = sf.h * nextSize
+        wf.x = sf.x + (sf.w - wf.w) / 2
+        wf.y = sf.y + (sf.h - wf.h) / 2
+
+        win:setFrame(wf, obj.animationDelay)
     end
 end
 
@@ -269,12 +272,14 @@ end
 function obj:center()
     return function()
         local win = hs.window.focusedWindow()
+        if not win then return end
+
         local f = win:frame()
         local screen = win:screen()
         local max = getAdjustedFrame(screen)
         f.x = max.x + (max.w - f.w) / 2
         f.y = max.y + (max.h - f.h) / 2
-        win:setFrame(f)
+        win:setFrame(f, obj.animationDelay)
     end
 end
 
@@ -282,20 +287,80 @@ end
 function obj:upperCenter()
     return function()
         local win = hs.window.focusedWindow()
+        if not win then return end
+
         local f = win:frame()
         local screen = win:screen()
         local max = getAdjustedFrame(screen)
         f.x = max.x + (max.w - f.w) / 2
         f.y = max.y + (max.h - f.h) / 3
-        win:setFrame(f)
+        win:setFrame(f, obj.animationDelay)
     end
 end
+
+-- Move window to another screen
+function obj:moveToScreen(direction)
+    return function()
+        local win = hs.window.focusedWindow()
+        if not win then return end
+
+        local screen = win:screen()
+        local nextScreen = screen:next()
+
+        if direction == "prev" then
+            nextScreen = screen:previous()
+        end
+
+        local currentFrame = win:frame()
+        local currentScreenFrame = screen:frame()
+
+        -- Calculate relative position
+        local relativeX = (currentFrame.x - currentScreenFrame.x) / currentScreenFrame.w
+        local relativeY = (currentFrame.y - currentScreenFrame.y) / currentScreenFrame.h
+        local relativeW = currentFrame.w / currentScreenFrame.w
+        local relativeH = currentFrame.h / currentScreenFrame.h
+
+        win:moveToScreen(nextScreen)
+
+        -- Re-apply the relative position on the new screen
+        local newScreenFrame = nextScreen:frame()
+        local newFrame = {
+            x = math.floor(newScreenFrame.x + (relativeX * newScreenFrame.w)),
+            y = math.floor(newScreenFrame.y + (relativeY * newScreenFrame.h)),
+            w = math.floor(relativeW * newScreenFrame.w),
+            h = math.floor(relativeH * newScreenFrame.h)
+        }
+
+        win:setFrame(newFrame, obj.animationDelay)
+    end
+end
+
+-- Change Stage Manager stage
+function obj:changeStage(stageNumber)
+    local script = string.format([[
+        tell application "System Events" to tell process "WindowManager"
+            tell list 1 of group 1
+                click button %d
+            end tell
+        end tell
+    ]], stageNumber)
+
+    local ok, _, _ = hs.osascript.applescript(script)
+    if ok then
+        obj.logger.i("Changed to Stage " .. stageNumber)
+    else
+        obj.logger.w("Failed to change Stage")
+    end
+end
+
+-- Configuration functions
 
 -- Set custom sizes for almost maximize feature
 function obj:setCustomMaximizeSizes(sizes)
     if type(sizes) == "table" and #sizes > 0 then
+        table.sort(sizes, function(a, b) return a > b end)
         obj.almostMaximizeSizes = sizes
-        currentMaximizeState = 0  -- Reset the state when changing sizes
+        obj.logger.i("Custom maximize sizes set: " .. table.concat(sizes, ", "))
     else
         obj.logger.w("Invalid input. Please provide a table with at least one size value.")
     end
@@ -332,11 +397,28 @@ function obj:setEdgeGap(gap)
     end
 end
 
--- Set all gaps and Stage Manager width at once
-function obj:setAllGaps(windowGap, edgeGap, stageManagerWidth)
+-- Set all gaps at once
+function obj:setAllGaps(windowGap, edgeGap)
     self:setWindowGap(windowGap)
     self:setEdgeGap(edgeGap)
-    self:setStageManagerWidth(stageManagerWidth)
+end
+
+-- Set the animation delay
+function obj:setAnimationDelay(sec)
+    if type(sec) == "number" and sec >= 0 then
+        self.animationDelay = sec
+        obj.logger.i("Animation delay set to " .. sec .. " seconds")
+    else
+        obj.logger.w("Invalid input. Please provide a non-negative number for the animation delay.")
+    end
+end
+
+-- Initialize the Spoon
+function obj:init()
+    updateStageManagerAndDockInfo()
+
+    -- Set up a timer to periodically update Stage Manager and Dock info
+    hs.timer.doEvery(300, updateStageManagerAndDockInfo)
 end
 
 return obj
