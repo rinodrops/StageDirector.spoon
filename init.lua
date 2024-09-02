@@ -90,6 +90,34 @@ local function isAtCorner(win, screen, corner)
     return isAtEdge(win, screen, edges[corner][1]) and isAtEdge(win, screen, edges[corner][2])
 end
 
+-- Check if a window is in a specific corner
+local function isWindowInCorner(screen, corner)
+    local windows = hs.window.visibleWindows()
+    local sf = getAdjustedFrame(screen)
+    for _, win in ipairs(windows) do
+        if win:screen() == screen and not win:isFullScreen() then
+            local wf = win:frame()
+            if corner == "top-left" and isAlmostEqual(wf.x, sf.x) and isAlmostEqual(wf.y, sf.y) and isAlmostEqual(wf.h, sf.h / 4) then
+                return win
+            elseif corner == "top-right" and isAlmostEqual(wf.x + wf.w, sf.x + sf.w) and isAlmostEqual(wf.y, sf.y) and isAlmostEqual(wf.h, sf.h / 4) then
+                return win
+            elseif corner == "bottom-left" and isAlmostEqual(wf.x, sf.x) and isAlmostEqual(wf.y + wf.h, sf.y + sf.h) and isAlmostEqual(wf.h, sf.h / 4) then
+                return win
+            elseif corner == "bottom-right" and isAlmostEqual(wf.x + wf.w, sf.x + sf.w) and isAlmostEqual(wf.y + wf.h, sf.y + sf.h) and isAlmostEqual(wf.h, sf.h / 4) then
+                return win
+            end
+        end
+    end
+    return nil
+end
+
+-- Check if a window's height is approximately 1/4 of the screen height
+local function isWindowHeightQuarter(window, screen)
+    local wf = window:frame()
+    local sf = getAdjustedFrame(screen)
+    return isAlmostEqual(wf.h, sf.h / 4)
+end
+
 -- Calculate width considering gaps
 local function calculateWidth(sf, fraction)
     return math.floor((sf.w - ((1 / fraction) - 1) * obj.windowGap) * fraction)
@@ -123,35 +151,73 @@ function obj:moveOrResize(direction)
         local sf = getAdjustedFrame(screen)
         local wf = win:frame()
 
-        local atEdge = isAtEdge(win, screen, direction)
         local currentFractionW = getCurrentSizeFraction(win, screen, "w")
         local currentFractionH = getCurrentSizeFraction(win, screen, "h")
 
         if direction == "left" or direction == "right" then
             local isLeft = (direction == "left")
-            if not atEdge then
-                wf.x = isLeft and sf.x or (sf.x + sf.w - wf.w)
+            local topCorner = isLeft and "top-left" or "top-right"
+            local bottomCorner = isLeft and "bottom-left" or "bottom-right"
+
+            local topWindow = isWindowInCorner(screen, topCorner)
+            local bottomWindow = isWindowInCorner(screen, bottomCorner)
+
+            -- Check if the corner windows are not the selected window and have 1/4 height
+            local topQuarter = topWindow and topWindow ~= win and isWindowHeightQuarter(topWindow, screen)
+            local bottomQuarter = bottomWindow and bottomWindow ~= win and isWindowHeightQuarter(bottomWindow, screen)
+
+            -- Determine if we're moving from one side to the other
+            local movingAcross = (isLeft and wf.x > sf.x + sf.w/2) or (not isLeft and wf.x < sf.x + sf.w/2)
+
+            -- Determine the next width
+            local nextWidth
+            if movingAcross then
+                nextWidth = calculateWidth(sf, 1/2)
             else
-                if not isAlmostEqual(wf.h, sf.h) then
-                    wf.h = sf.h
-                    wf.w = calculateWidth(sf, 1/2)
+                if isAlmostEqual(currentFractionW, 1/2) then
+                    nextWidth = calculateWidth(sf, 1/3)
+                elseif isAlmostEqual(currentFractionW, 1/3) then
+                    nextWidth = calculateWidth(sf, 1/4)
+                elseif isAlmostEqual(currentFractionW, 1/4) then
+                    nextWidth = calculateWidth(sf, 2/3)
+                elseif isAlmostEqual(currentFractionW, 2/3) then
+                    nextWidth = calculateWidth(sf, 3/4)
+                elseif isAlmostEqual(currentFractionW, 3/4) then
+                    nextWidth = calculateWidth(sf, 1/2)
                 else
-                    if isAlmostEqual(currentFractionW, 1/2) then
-                        wf.w = calculateWidth(sf, 1/3)
-                    elseif isAlmostEqual(currentFractionW, 1/3) then
-                        wf.w = calculateWidth(sf, 1/4)
-                    else
-                        wf.w = calculateWidth(sf, 1/2)
-                    end
+                    nextWidth = calculateWidth(sf, 1/2)
                 end
-                wf.x = isLeft and sf.x or (sf.x + sf.w - wf.w)
             end
-            wf.y = sf.y
-            wf.h = sf.h
+
+            -- Scenario 1: No 1/4-height windows at corners
+            if not topQuarter and not bottomQuarter then
+                if isAtEdge(win, screen, direction) or movingAcross then
+                    wf.w = nextWidth
+                end
+                wf.h = sf.h
+                wf.y = sf.y
+            -- Scenario 2: 1/4-height window at top corner
+            elseif topQuarter and not bottomQuarter then
+                wf.y = sf.y + sf.h / 4 + obj.windowGap
+                wf.h = sf.h * 3/4 - obj.windowGap
+                wf.w = nextWidth
+            -- Scenario 3: 1/4-height window at bottom corner
+            elseif bottomQuarter and not topQuarter then
+                wf.y = sf.y
+                wf.h = sf.h * 3/4 - obj.windowGap
+                wf.w = nextWidth
+            -- Scenario 4: 1/4-height windows at both corners
+            elseif topQuarter and bottomQuarter then
+                wf.y = sf.y + sf.h / 4 + obj.windowGap
+                wf.h = sf.h / 2 - obj.windowGap * 2
+                wf.w = nextWidth
+            end
+
+            wf.x = isLeft and sf.x or (sf.x + sf.w - wf.w)
+
         elseif direction == "top" or direction == "bottom" then
             local isTop = (direction == "top")
-            wf_old = wf
-            if not atEdge then
+            if not isAtEdge(win, screen, direction) then
                 wf.y = isTop and sf.y or (sf.y + sf.h - wf.h)
             else
                 if not isAlmostEqual(wf.w, sf.w) then
@@ -209,6 +275,9 @@ function obj:moveOrResizeCorner(corner)
                 wf.h = calculateHeight(sf, 1/2)
             elseif isAlmostEqual(currentFractionW, 1/4) and isAlmostEqual(currentFractionH, 1/2) then
                 wf.w = calculateWidth(sf, 1/2)
+                wf.h = calculateHeight(sf, 1/4)
+            elseif isAlmostEqual(currentFractionW, 1/2) and isAlmostEqual(currentFractionH, 1/4) then
+                wf.w = calculateWidth(sf, 1/3)
                 wf.h = calculateHeight(sf, 1/4)
             else
                 wf.w = calculateWidth(sf, 1/2)
