@@ -7,7 +7,7 @@ obj.__index = obj
 
 -- Metadata
 obj.name = "StageDirector"
-obj.version = "2.1"
+obj.version = "2.1.1"
 obj.author = "Rino"
 obj.homepage = "https://github.com/rinodrops/StageDirector.spoon"
 obj.license = "MIT - https://opensource.org/licenses/MIT"
@@ -199,18 +199,20 @@ function obj:moveOrResize(direction)
                 wf.y = sf.y
             -- Scenario 2: 1/4-height window at top corner
             elseif topQuarter and not bottomQuarter then
-                wf.y = sf.y + sf.h / 4 + obj.windowGap
-                wf.h = sf.h * 3/4 - obj.windowGap
+                wf.y = sf.y + sf.h / 4 + obj.windowGap/2
+                wf.h = sf.h * 3/4 - obj.windowGap/2
                 wf.w = nextWidth
             -- Scenario 3: 1/4-height window at bottom corner
             elseif bottomQuarter and not topQuarter then
                 wf.y = sf.y
-                wf.h = sf.h * 3/4 - obj.windowGap
+                wf.h = sf.h * 3/4 - obj.windowGap/2
                 wf.w = nextWidth
             -- Scenario 4: 1/4-height windows at both corners
             elseif topQuarter and bottomQuarter then
-                wf.y = sf.y + sf.h / 4 + obj.windowGap
-                wf.h = sf.h / 2 - obj.windowGap * 2
+                -- wf.y = sf.y + sf.h / 4 + obj.windowGap
+                -- wf.h = sf.h / 2 - obj.windowGap * 2
+                wf.y = sf.y + sf.h / 4 + obj.windowGap/2
+                wf.h = sf.h / 2 - obj.windowGap
                 wf.w = nextWidth
             end
 
@@ -234,9 +236,9 @@ function obj:moveOrResize(direction)
                     end
                 end
                 wf.y = isTop and sf.y or (sf.y + sf.h - wf.h)
+                wf.x = sf.x
+                wf.w = sf.w
             end
-            wf.x = sf.x
-            wf.w = sf.w
         end
 
         win:setFrame(wf, obj.animationDelay)
