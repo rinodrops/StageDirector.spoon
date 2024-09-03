@@ -20,7 +20,6 @@ obj.stageManagerWidth = 40  -- Width of Stage Manager sidebar
 obj.windowGap = 8           -- Gap between windows
 obj.edgeGap = 8             -- Gap between windows and screen edges
 obj.almostMaximizeSizes = {0.9, 0.65}  -- Default sizes for Almost Maximize
-obj.animationDelay = 0      -- Animation delay in seconds
 
 -- Internal variables
 local stageManagerEnabled = false
@@ -241,7 +240,7 @@ function obj:moveOrResize(direction)
             end
         end
 
-        win:setFrame(wf, obj.animationDelay)
+        win:setFrame(wf)
     end
 end
 
@@ -264,7 +263,7 @@ function obj:moveOrResizeCorner(corner)
 
         if not isAtCorner(win, screen, corner) then
             -- If not at the corner, just move to the corner without resizing
-            win:setFrame(wf, obj.animationDelay)
+            win:setFrame(wf)
         else
             -- If already at the corner, cycle through sizes
             local currentFractionW = getCurrentSizeFraction(win, screen, "w")
@@ -292,7 +291,7 @@ function obj:moveOrResizeCorner(corner)
             wf.y = isTop and sf.y or (sf.y + sf.h - wf.h)
         end
 
-        win:setFrame(wf, obj.animationDelay)
+        win:setFrame(wf)
     end
 end
 
@@ -336,7 +335,7 @@ function obj:toggleMaximize()
         wf.x = sf.x + (sf.w - wf.w) / 2
         wf.y = sf.y + (sf.h - wf.h) / 2
 
-        win:setFrame(wf, obj.animationDelay)
+        win:setFrame(wf)
     end
 end
 
@@ -351,7 +350,7 @@ function obj:center()
         local max = getAdjustedFrame(screen)
         f.x = max.x + (max.w - f.w) / 2
         f.y = max.y + (max.h - f.h) / 2
-        win:setFrame(f, obj.animationDelay)
+        win:setFrame(f)
     end
 end
 
@@ -366,7 +365,7 @@ function obj:upperCenter()
         local max = getAdjustedFrame(screen)
         f.x = max.x + (max.w - f.w) / 2
         f.y = max.y + (max.h - f.h) / 3
-        win:setFrame(f, obj.animationDelay)
+        win:setFrame(f)
     end
 end
 
@@ -403,7 +402,7 @@ function obj:moveToScreen(direction)
             h = math.floor(relativeH * newScreenFrame.h)
         }
 
-        win:setFrame(newFrame, obj.animationDelay)
+        win:setFrame(newFrame)
     end
 end
 
@@ -533,12 +532,12 @@ function obj:setAllGaps(windowGap, edgeGap)
 end
 
 -- Set the animation delay
-function obj:setAnimationDelay(sec)
+function obj:setAnimationDuration(sec)
     if type(sec) == "number" and sec >= 0 then
-        self.animationDelay = sec
-        obj.logger.i("Animation delay set to " .. sec .. " seconds")
+        hs.window.animationDuration = sec
+        obj.logger.i("Animation duration set to " .. sec .. " seconds")
     else
-        obj.logger.w("Invalid input. Please provide a non-negative number for the animation delay.")
+        obj.logger.w("Invalid input. Please provide a non-negative number for the animation duration.")
     end
 end
 
@@ -551,6 +550,11 @@ function obj:init()
 
     -- Initialize currentStage
     currentStage = 1
+
+    -- Make `:setFrame()` perform additional checks and workarounds
+    hs.window.setFrameCorrectness = true
+
+    hs.window.animationDuration = 0.1
 end
 
 return obj
