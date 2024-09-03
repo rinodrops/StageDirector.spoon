@@ -7,7 +7,7 @@ obj.__index = obj
 
 -- Metadata
 obj.name = "StageDirector"
-obj.version = "2.0"
+obj.version = "2.1"
 obj.author = "Rino"
 obj.homepage = "https://github.com/rinodrops/StageDirector.spoon"
 obj.license = "MIT - https://opensource.org/licenses/MIT"
@@ -26,6 +26,7 @@ obj.animationDelay = 0      -- Animation delay in seconds
 local stageManagerEnabled = false
 local dockPosition = "bottom"
 local equalityTolerance = 0.02  -- 2% tolerance for "almost equal" comparisons
+local currentStage = 1  -- Keep track of the current stage
 
 -- Helper Functions
 
@@ -404,9 +405,35 @@ function obj:moveToScreen(direction)
     end
 end
 
+-- Get the number of stages
+local function getNumberOfStages()
+    local script = [[
+        tell application "System Events" to tell process "WindowManager"
+            tell list 1 of group 1
+                return count buttons
+            end tell
+        end tell
+    ]]
+    local ok, result = hs.osascript.applescript(script)
+    if ok then
+        return tonumber(result)
+    else
+        obj.logger.w("Failed to get number of stages")
+        return nil
+    end
+end
+
 -- Change Stage Manager stage
 function obj:changeStage(stageNumber)
     return function()
+        local numberOfStages = getNumberOfStages()
+        if not numberOfStages then return end
+
+        if stageNumber < 1 or stageNumber > numberOfStages then
+            obj.logger.w("Invalid stage number: " .. stageNumber)
+            return
+        end
+
         local script = string.format([[
             tell application "System Events" to tell process "WindowManager"
                 tell list 1 of group 1
@@ -417,11 +444,40 @@ function obj:changeStage(stageNumber)
 
         local ok, _, _ = hs.osascript.applescript(script)
         if ok then
+            currentStage = stageNumber
             obj.logger.i("Changed to Stage " .. stageNumber)
         else
             obj.logger.w("Failed to change Stage")
         end
     end
+end
+
+-- Change to the next stage
+function obj:nextStage()
+    return function()
+        local numberOfStages = getNumberOfStages()
+        if not numberOfStages then return end
+
+        local nextStage = (currentStage % numberOfStages) + 1
+
+        self:changeStage(nextStage)()
+    end
+end
+
+-- Change to the previous stage
+function obj:prevStage()
+    return function()
+        local numberOfStages = getNumberOfStages()
+        if not numberOfStages then return end
+
+        local prevStage = ((currentStage - 2 + numberOfStages) % numberOfStages) + 1
+        self:changeStage(prevStage)()
+    end
+end
+
+-- Get the current stage number
+function obj:getCurrentStage()
+    return currentStage
 end
 
 -- Configuration functions
@@ -490,6 +546,9 @@ function obj:init()
 
     -- Set up a timer to periodically update Stage Manager and Dock info
     hs.timer.doEvery(300, updateStageManagerAndDockInfo)
+
+    -- Initialize currentStage
+    currentStage = 1
 end
 
 return obj
